@@ -167,7 +167,7 @@ public class PreferenceConfiguration {
         else if (str.equals("720p60")) {
             config.width = 1280;
             config.height = 720;
-            config.fps = 60;
+            config.fps = 59;
         }
         else if (str.equals("1080p30")) {
             config.width = 1920;
@@ -177,7 +177,7 @@ public class PreferenceConfiguration {
         else if (str.equals("1080p60")) {
             config.width = 1920;
             config.height = 1080;
-            config.fps = 60;
+            config.fps = 59;
         }
         else if (str.equals("4K30")) {
             config.width = 3840;
@@ -187,13 +187,13 @@ public class PreferenceConfiguration {
         else if (str.equals("4K60")) {
             config.width = 3840;
             config.height = 2160;
-            config.fps = 60;
+            config.fps = 59;
         }
         else {
             // Should never get here
             config.width = 1280;
             config.height = 720;
-            config.fps = 60;
+            config.fps = 59;
         }
 
         config.videoFormat = getVideoFormatValue(context);
