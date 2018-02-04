@@ -19,7 +19,10 @@ import android.media.MediaFormat;
 import android.media.MediaCodec.BufferInfo;
 import android.media.MediaCodec.CodecException;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Range;
+import android.view.Choreographer;
 import android.view.SurfaceHolder;
 
 public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
@@ -40,7 +43,6 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
     private boolean submitCsdNextCall;
 
     private MediaCodec videoDecoder;
-    private Thread rendererThread;
     private Thread[] spinnerThreads;
     private boolean needsSpsBitstreamFixup, isExynos4;
     private boolean adaptivePlayback, directSubmit;
@@ -63,6 +65,13 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
     private RendererException initialException;
     private long initialExceptionTimestamp;
     private static final int EXCEPTION_REPORT_DELAY_MS = 3000;
+
+    private boolean holdExtraFrame;
+    private int extraFrameIndex = -1;
+    private BufferInfo extraFrameInfo;
+    private static final int BUFFERS_TO_PROCESS = 4;
+    private BufferInfo[] bufferInfos = new BufferInfo[BUFFERS_TO_PROCESS];
+    private int[] outputBuffers = new int[BUFFERS_TO_PROCESS];
 
     private long lastTimestampUs;
     private long decoderTimeMs;
@@ -130,6 +139,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
         this.crashListener = crashListener;
         this.consecutiveCrashCount = consecutiveCrashCount;
         this.glRenderer = glRenderer;
+
+        for (int i = 0; i < bufferInfos.length; i++) {
+            bufferInfos[i] = new BufferInfo();
+        }
 
         // Disable spinner threads in battery saver mode or 4K
         if (prefs.batterySaver || prefs.height >= 2160) {
@@ -229,6 +242,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
         this.initialHeight = height;
         this.videoFormat = format;
         this.refreshRate = redrawRate;
+
+        // Buffer an extra frame for 60 FPS streams when requested
+        this.holdExtraFrame = prefs.disableFrameDrop && redrawRate >= 60;
 
         String mimeType;
         String selectedDecoderName;
@@ -387,69 +403,98 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
         }
     }
 
-    private void startRendererThread()
+    private void startChoreographerRenderer()
     {
-        rendererThread = new Thread() {
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
-                BufferInfo info = new BufferInfo();
-                while (!stopping) {
-                    try {
-                        // Try to output a frame
-                        int outIndex = videoDecoder.dequeueOutputBuffer(info, 50000);
-                        if (outIndex >= 0) {
-                            long presentationTimeUs = info.presentationTimeUs;
-                            int lastIndex = outIndex;
+                Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+                    @Override
+                    public void doFrame(long framePts) {
+                        if (stopping) {
+                            // Do nothing and don't re-register for callback
+                            return;
+                        }
 
-                            // Get the last output buffer in the queue
-                            while ((outIndex = videoDecoder.dequeueOutputBuffer(info, 0)) >= 0) {
-                                videoDecoder.releaseOutputBuffer(lastIndex, false);
+                        try {
+                            int frames = 0;
 
-                                lastIndex = outIndex;
-                                presentationTimeUs = info.presentationTimeUs;
+                            // If we have an extra frame from last time, add it to our set now
+                            if (extraFrameIndex >= 0) {
+                                outputBuffers[frames] = extraFrameIndex;
+                                bufferInfos[frames] = extraFrameInfo;
+                                frames++;
+                                extraFrameIndex = -1;
                             }
 
-                            // Render the last buffer
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && prefs.disableFrameDrop) {
-                                // Use a PTS that will cause this frame to never be dropped if frame dropping
-                                // is disabled
-                                videoDecoder.releaseOutputBuffer(lastIndex, 0);
-                            }
-                            else {
-                                videoDecoder.releaseOutputBuffer(lastIndex, true);
-                            }
-
-                            totalFramesRendered++;
-
-                            // Add delta time to the totals (excluding probable outliers)
-                            long delta = MediaCodecHelper.getMonotonicMillis() - (presentationTimeUs / 1000);
-                            if (delta >= 0 && delta < 1000) {
-                                decoderTimeMs += delta;
-                                if (!USE_FRAME_RENDER_TIME) {
-                                    totalTimeMs += delta;
+                            // Collect all frames available for rendering now
+                            while (frames < BUFFERS_TO_PROCESS) {
+                                outputBuffers[frames] = videoDecoder.dequeueOutputBuffer(bufferInfos[frames], 0);
+                                if (outputBuffers[frames] >= 0) {
+                                    // Got a valid frame, move on.
+                                    frames++;
+                                }
+                                else if (outputBuffers[frames] == MediaCodec.INFO_TRY_AGAIN_LATER) {
+                                    // No buffers available right now. Stop looping.
+                                    break;
+                                }
+                                else {
+                                    switch (outputBuffers[frames]) {
+                                        case MediaCodec.INFO_OUTPUT_FORMAT_CHANGED:
+                                            LimeLog.info("Output format changed");
+                                            LimeLog.info("New output Format: " + videoDecoder.getOutputFormat());
+                                            break;
+                                        default:
+                                            break;
+                                    }
                                 }
                             }
-                        } else {
-                            switch (outIndex) {
-                                case MediaCodec.INFO_TRY_AGAIN_LATER:
-                                    break;
-                                case MediaCodec.INFO_OUTPUT_FORMAT_CHANGED:
-                                    LimeLog.info("Output format changed");
-                                    LimeLog.info("New output Format: " + videoDecoder.getOutputFormat());
-                                    break;
-                                default:
-                                    break;
+
+                            for (int i = 0; i < frames; i++) {
+                                if (frames == 1 ||
+                                    (!holdExtraFrame && i == frames - 1) ||
+                                    (holdExtraFrame && i == frames - 2)) {
+
+                                    // Render this frame to the display
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                                        videoDecoder.releaseOutputBuffer(outputBuffers[i], framePts);
+                                    }
+                                    else {
+                                        videoDecoder.releaseOutputBuffer(outputBuffers[i], true);
+                                    }
+
+                                    totalFramesRendered++;
+
+                                    // Add delta time to the totals (excluding probable outliers)
+                                    long delta = MediaCodecHelper.getMonotonicMillis() - (bufferInfos[i].presentationTimeUs / 1000);
+                                    if (delta >= 0 && delta < 1000) {
+                                        decoderTimeMs += delta;
+                                        if (!USE_FRAME_RENDER_TIME) {
+                                            totalTimeMs += delta;
+                                        }
+                                    }
+                                }
+                                else if (holdExtraFrame && i == frames - 1) {
+                                    // Hold this frame for next V-sync just in case
+                                    // we don't have a new one in time.
+                                    extraFrameIndex = outputBuffers[i];
+                                    extraFrameInfo = bufferInfos[i];
+                                }
+                                else {
+                                    // Release this buffer without rendering
+                                    videoDecoder.releaseOutputBuffer(outputBuffers[i], false);
+                                }
                             }
+                        } catch (Exception e) {
+                            handleDecoderException(e, null, 0, false);
                         }
-                    } catch (Exception e) {
-                        handleDecoderException(e, null, 0, false);
+
+                        // Queue up a callback for next V-sync
+                        Choreographer.getInstance().postFrameCallback(this);
                     }
-                }
+                });
             }
-        };
-        rendererThread.setName("Video - Renderer (MediaCodec)");
-        rendererThread.setPriority(Thread.NORM_PRIORITY + 2);
-        rendererThread.start();
+        });
     }
 
     private void startSpinnerThread(final int i) {
@@ -559,7 +604,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
 
     @Override
     public void start() {
-        startRendererThread();
+        startChoreographerRenderer();
         startSpinnerThreads();
     }
 
@@ -567,22 +612,12 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
     public void prepareForStop() {
         // Let the decoding code know to ignore codec exceptions now
         stopping = true;
-
-        // Halt the rendering thread
-        if (rendererThread != null) {
-            rendererThread.interrupt();
-        }
     }
 
     @Override
     public void stop() {
         // May be called already, but we'll call it now to be safe
         prepareForStop();
-
-        // Wait for the renderer thread to shut down
-        try {
-            rendererThread.join();
-        } catch (InterruptedException ignored) { }
 
         // Halt the spinner threads
         stopSpinnerThreads();
