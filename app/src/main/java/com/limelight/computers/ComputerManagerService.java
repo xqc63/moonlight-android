@@ -514,7 +514,7 @@ public class ComputerManagerService extends Service {
         t.start();
     }
 
-    private String fastPollPc(final String localAddress, final String remoteAddress, final String manualAddress) throws InterruptedException {
+    private String fastPollPc(final String localAddress, final String remoteAddress, final String manualAddress, final String ipv6Address) throws InterruptedException {
         final boolean[] remoteInfo = new boolean[2];
         final boolean[] localInfo = new boolean[2];
         final boolean[] manualInfo = new boolean[2];
@@ -566,8 +566,8 @@ public class ComputerManagerService extends Service {
         // Do not write this address to details.activeAddress because:
         // a) it's only a candidate and may be wrong (multiple PCs behind a single router)
         // b) if it's null, it will be unexpectedly nulling the activeAddress of a possibly online PC
-        LimeLog.info("Starting fast poll for "+details.name+" ("+details.localAddress +", "+details.remoteAddress +", "+details.manualAddress +")");
-        String candidateAddress = fastPollPc(details.localAddress, details.remoteAddress, details.manualAddress);
+        LimeLog.info("Starting fast poll for "+details.name+" ("+details.localAddress +", "+details.remoteAddress +", "+details.manualAddress+", "+details.ipv6Address+")");
+        String candidateAddress = fastPollPc(details.localAddress, details.remoteAddress, details.manualAddress, details.ipv6Address);
         LimeLog.info("Fast poll for "+details.name+" returned candidate address: "+candidateAddress);
 
         // If no connection could be established to either IP address, there's nothing we can do
