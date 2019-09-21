@@ -63,6 +63,6 @@ Moonlight is the work of students at [Case Western](http://case.edu) and was
 started as a project at [MHacks](http://mhacks.org).
 
 做了一部分更改:
-*添加快速投射桌面按钮(默认程序名mstsc)
-*当投射程序名为mstsc时,,一旦推流页onStop,直接关闭推流
-*在判断是否游戏控制器时,将非字母键盘和字母键盘都改为非手柄,以防止M3遥控器的返回键被吞
+* 添加快速投射桌面按钮(默认程序名mstsc)
+* 当投射程序名为mstsc时,,一旦推流页onStop,直接关闭推流
+* 在判断是否游戏控制器时,将非字母键盘和字母键盘都改为非手柄,以防止M3遥控器的返回键被吞
