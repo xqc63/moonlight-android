@@ -10,7 +10,6 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import com.limelight.R;
-import com.limelight.preferences.PreferenceConfiguration;
 
 import java.util.ArrayList;
 
@@ -53,6 +52,10 @@ public abstract class GenericGridAdapter<T> extends BaseAdapter {
     @Override
     public long getItemId(int i) {
         return i;
+    }
+
+    public ArrayList<T> getData(){
+        return itemList;
     }
 
     public abstract boolean populateImageView(ImageView imgView, ProgressBar prgView, T obj);

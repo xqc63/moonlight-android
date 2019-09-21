@@ -10,6 +10,7 @@ import com.limelight.R;
 import com.limelight.ShortcutTrampoline;
 import com.limelight.binding.PlatformBinding;
 import com.limelight.computers.ComputerManagerService;
+import com.limelight.nvstream.NvConnection;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.GfeHttpResponseException;
 import com.limelight.nvstream.http.NvApp;
@@ -40,7 +41,7 @@ public class ServerHelper {
         i.putExtra(AppView.NAME_EXTRA, computer.name);
         i.putExtra(AppView.UUID_EXTRA, computer.uuid);
         i.putExtra(Game.EXTRA_APP_NAME, app.getAppName());
-        i.putExtra(Game.EXTRA_APP_ID, ""+app.getAppId());
+        i.putExtra(Game.EXTRA_APP_ID, "" + app.getAppId());
         i.putExtra(Game.EXTRA_APP_HDR, app.isHdrSupported());
         i.setAction(Intent.ACTION_DEFAULT);
         return i;
@@ -99,9 +100,54 @@ public class ServerHelper {
                     if (e.getErrorCode() == 599) {
                         message = "This session wasn't started by this device," +
                                 " so it cannot be quit. End streaming on the original " +
-                                "device or the PC itself. (Error code: "+e.getErrorCode()+")";
+                                "device or the PC itself. (Error code: " + e.getErrorCode() + ")";
                     }
                     else {
+                        message = e.getMessage();
+                    }
+                } catch (UnknownHostException e) {
+                    message = parent.getResources().getString(R.string.error_unknown_host);
+                } catch (FileNotFoundException e) {
+                    message = parent.getResources().getString(R.string.error_404);
+                } catch (IOException | XmlPullParserException e) {
+                    message = e.getMessage();
+                    e.printStackTrace();
+                } finally {
+                    if (onComplete != null) {
+                        onComplete.run();
+                    }
+                }
+
+                final String toastMessage = message;
+                parent.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(parent, toastMessage, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        }).start();
+    }
+
+    public static void doQuit(final Activity parent, final String appName, final NvConnection connection, final Runnable onComplete) {
+//        Toast.makeText(parent, parent.getResources().getString(R.string.applist_quit_app) + " " + app.getAppName() + "...", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                NvHTTP httpConn;
+                String message;
+                try {
+                    if (connection.genNvHttp().quitApp()) {
+                        message = parent.getResources().getString(R.string.applist_quit_success) + " " + appName;
+                    } else {
+                        message = parent.getResources().getString(R.string.applist_quit_fail) + " " + appName;
+                    }
+                } catch (GfeHttpResponseException e) {
+                    if (e.getErrorCode() == 599) {
+                        message = "This session wasn't started by this device," +
+                                " so it cannot be quit. End streaming on the original " +
+                                "device or the PC itself. (Error code: " + e.getErrorCode() + ")";
+                    } else {
                         message = e.getMessage();
                     }
                 } catch (UnknownHostException e) {
