@@ -1,13 +1,15 @@
 package com.limelight.nvstream.av.audio;
 
+import com.limelight.nvstream.jni.MoonBridge;
+
 public interface AudioRenderer {
-	int setup(int audioConfiguration);
+    int setup(MoonBridge.AudioConfiguration audioConfiguration, int sampleRate, int samplesPerFrame);
 
-	void start();
+    void start();
 
-	void stop();
-	
-	void playDecodedAudio(short[] audioData);
-	
-	void cleanup();
+    void stop();
+    
+    void playDecodedAudio(short[] audioData);
+    
+    void cleanup();
 }

@@ -22,7 +22,7 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 public class VirtualController {
-    public class ControllerInputContext {
+    public static class ControllerInputContext {
         public short inputMap = 0x0000;
         public byte leftTrigger = 0x00;
         public byte rightTrigger = 0x00;
@@ -34,7 +34,8 @@ public class VirtualController {
 
     public enum ControllerMode {
         Active,
-        Configuration
+        MoveButtons,
+        ResizeButtons
     }
 
     private static final boolean _PRINT_DEBUG_INFORMATION = false;
@@ -72,13 +73,16 @@ public class VirtualController {
             public void onClick(View v) {
                 String message;
 
-                if (currentMode == ControllerMode.Configuration) {
+                if (currentMode == ControllerMode.Active){
+                    currentMode = ControllerMode.MoveButtons;
+                    message = "Entering configuration mode (Move buttons)";
+                } else if (currentMode == ControllerMode.MoveButtons) {
+                    currentMode = ControllerMode.ResizeButtons;
+                    message = "Entering configuration mode (Resize buttons)";
+                } else {
                     currentMode = ControllerMode.Active;
                     VirtualControllerConfigurationLoader.saveProfile(VirtualController.this, context);
                     message = "Exiting configuration mode";
-                } else {
-                    currentMode = ControllerMode.Configuration;
-                    message = "Entering configuration mode";
                 }
 
                 Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
@@ -90,6 +94,7 @@ public class VirtualController {
                 }
             }
         });
+
     }
 
     public void hide() {
@@ -119,6 +124,13 @@ public class VirtualController {
         }
         elements.clear();
     }
+
+    public void setOpacity(int opacity) {
+        for (VirtualControllerElement element : elements) {
+            element.setOpacity(opacity);
+        }
+    }
+
 
     public void addElement(VirtualControllerElement element, int x, int y, int width, int height) {
         elements.add(element);

@@ -434,8 +434,7 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
                 return true;
 
             case VIEW_DETAILS_ID:
-                Dialog.displayDialog(AppView.this, getResources().getString(R.string.title_details),
-                        getResources().getString(R.string.applist_details_id) + " " + app.app.getAppId(), false);
+                Dialog.displayDialog(AppView.this, getResources().getString(R.string.title_details), app.app.toString(), false);
                 return true;
 
             case CREATE_SHORTCUT_ID:
@@ -517,6 +516,12 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
                     if (!foundExistingApp) {
                         // This app must be new
                         appGridAdapter.addApp(new AppObject(app));
+
+                        // We could have a leftover shortcut from last time this PC was paired
+                        // or if this app was removed then added again. Enable those shortcuts
+                        // again if present.
+                        shortcutHelper.enableAppShortcut(computer, app);
+
                         updated = true;
                     }
                 }
@@ -559,9 +564,8 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
 
     @Override
     public int getAdapterFragmentLayoutId() {
-        return PreferenceConfiguration.readPreferences(this).listMode ?
-                R.layout.list_view : (PreferenceConfiguration.readPreferences(AppView.this).smallIconMode ?
-                    R.layout.app_grid_view_small : R.layout.app_grid_view);
+        return PreferenceConfiguration.readPreferences(AppView.this).smallIconMode ?
+                    R.layout.app_grid_view_small : R.layout.app_grid_view;
     }
 
     @Override
@@ -586,7 +590,7 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
         listView.requestFocus();
     }
 
-    public class AppObject {
+    public static class AppObject {
         public final NvApp app;
         public boolean isRunning;
 

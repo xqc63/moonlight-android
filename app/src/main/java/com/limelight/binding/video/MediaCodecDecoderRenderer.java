@@ -45,6 +45,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
     private Thread rendererThread;
     private boolean needsSpsBitstreamFixup, isExynos4;
     private boolean adaptivePlayback, directSubmit;
+    private boolean lowLatency;
     private boolean constrainedHighProfile;
     private boolean refFrameInvalidationAvc, refFrameInvalidationHevc;
     private boolean refFrameInvalidationActive;
@@ -59,6 +60,10 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
     private boolean foreground = true;
     private boolean legacyFrameDropRendering = false;
     private PerfOverlayListener perfListener;
+
+    private MediaFormat inputFormat;
+    private MediaFormat outputFormat;
+    private MediaFormat configuredFormat;
 
     private boolean needsBaselineSpsHack;
     private SeqParameterSet savedSps;
@@ -161,7 +166,6 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
         // shared between AVC and HEVC decoders on the same device.
         if (avcDecoder != null) {
             directSubmit = MediaCodecHelper.decoderCanDirectSubmit(avcDecoder.getName());
-            adaptivePlayback = MediaCodecHelper.decoderSupportsAdaptivePlayback(avcDecoder);
             refFrameInvalidationAvc = MediaCodecHelper.decoderSupportsRefFrameInvalidationAvc(avcDecoder.getName(), prefs.height);
             refFrameInvalidationHevc = MediaCodecHelper.decoderSupportsRefFrameInvalidationHevc(avcDecoder.getName());
 
@@ -190,8 +194,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
         return avcDecoder != null;
     }
 
-    public boolean is49FpsBlacklisted() {
-        return avcDecoder != null && MediaCodecHelper.decoderBlacklistedFor49Fps(avcDecoder.getName());
+    public boolean isBlacklistedForFrameRate(int frameRate) {
+        return avcDecoder != null && MediaCodecHelper.decoderBlacklistedForFrameRate(avcDecoder.getName(), frameRate);
     }
 
     public void enableLegacyFrameDropRendering() {
@@ -264,6 +268,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
             }
 
             refFrameInvalidationActive = refFrameInvalidationAvc;
+
+            lowLatency = MediaCodecHelper.decoderSupportsLowLatency(avcDecoder, mimeType);
+            adaptivePlayback = MediaCodecHelper.decoderSupportsAdaptivePlayback(avcDecoder, mimeType);
         }
         else if ((videoFormat & MoonBridge.VIDEO_FORMAT_MASK_H265) != 0) {
             mimeType = "video/hevc";
@@ -275,6 +282,9 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
             }
 
             refFrameInvalidationActive = refFrameInvalidationHevc;
+
+            lowLatency = MediaCodecHelper.decoderSupportsLowLatency(hevcDecoder, mimeType);
+            adaptivePlayback = MediaCodecHelper.decoderSupportsAdaptivePlayback(hevcDecoder, mimeType);
         }
         else {
             // Unknown format
@@ -293,6 +303,14 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
 
         MediaFormat videoFormat = MediaFormat.createVideoFormat(mimeType, width, height);
 
+        // Avoid setting KEY_FRAME_RATE on Lollipop and earlier to reduce compatibility risk
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // We use prefs.fps instead of redrawRate here because the low latency hack in Game.java
+            // may leave us with an odd redrawRate value like 59 or 49 which might cause the decoder
+            // to puke. To be safe, we'll use the unmodified value.
+            videoFormat.setInteger(MediaFormat.KEY_FRAME_RATE, prefs.fps);
+        }
+
         // Adaptive playback can also be enabled by the whitelist on pre-KitKat devices
         // so we don't fill these pre-KitKat
         if (adaptivePlayback && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
@@ -300,16 +318,39 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
             videoFormat.setInteger(MediaFormat.KEY_MAX_HEIGHT, height);
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Operate at maximum rate to lower latency as much as possible on
-            // some Qualcomm platforms. We could also set KEY_PRIORITY to 0 (realtime)
-            // but that will actually result in the decoder crashing if it can't satisfy
-            // our (ludicrous) operating rate requirement.
-            videoFormat.setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && lowLatency) {
+            videoFormat.setInteger(MediaFormat.KEY_LOW_LATENCY, 1);
         }
+        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // Set the Qualcomm vendor low latency extension if the Android R option is unavailable
+            if (MediaCodecHelper.decoderSupportsQcomVendorLowLatency(selectedDecoderName)) {
+                // MediaCodec supports vendor-defined format keys using the "vendor.<extension name>.<parameter name>" syntax.
+                // These allow access to functionality that is not exposed through documented MediaFormat.KEY_* values.
+                // https://cs.android.com/android/platform/superproject/+/master:hardware/qcom/sdm845/media/mm-video-v4l2/vidc/common/inc/vidc_vendor_extensions.h;l=67
+                //
+                // Examples of Qualcomm's vendor extensions for Snapdragon 845:
+                // https://cs.android.com/android/platform/superproject/+/master:hardware/qcom/sdm845/media/mm-video-v4l2/vidc/vdec/src/omx_vdec_extensions.hpp
+                // https://cs.android.com/android/_/android/platform/hardware/qcom/sm8150/media/+/0621ceb1c1b19564999db8293574a0e12952ff6c
+                videoFormat.setInteger("vendor.qti-ext-dec-low-latency.enable", 1);
+            }
+
+            if (MediaCodecHelper.decoderSupportsMaxOperatingRate(selectedDecoderName)) {
+                videoFormat.setInteger(MediaFormat.KEY_OPERATING_RATE, Short.MAX_VALUE);
+            }
+        }
+
+        configuredFormat = videoFormat;
+        LimeLog.info("Configuring with format: "+configuredFormat);
 
         try {
             videoDecoder.configure(videoFormat, renderTarget.getSurface(), null, 0);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                // This will contain the actual accepted input format attributes
+                inputFormat = videoDecoder.getInputFormat();
+                LimeLog.info("Input format: "+inputFormat);
+            }
+
             videoDecoder.setVideoScalingMode(MediaCodec.VIDEO_SCALING_MODE_SCALE_TO_FIT);
 
             if (USE_FRAME_RENDER_TIME && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -334,6 +375,7 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
                 legacyInputBuffers = videoDecoder.getInputBuffers();
             }
+
         } catch (Exception e) {
             e.printStackTrace();
             return -5;
@@ -445,7 +487,8 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
                                     break;
                                 case MediaCodec.INFO_OUTPUT_FORMAT_CHANGED:
                                     LimeLog.info("Output format changed");
-                                    LimeLog.info("New output Format: " + videoDecoder.getOutputFormat());
+                                    outputFormat = videoDecoder.getOutputFormat();
+                                    LimeLog.info("New output format: " + outputFormat);
                                     break;
                                 default:
                                     break;
@@ -683,17 +726,17 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
             // for known resolution combinations. Reference frame invalidation may need
             // these, so leave them be for those decoders.
             if (!refFrameInvalidationActive) {
-                if (initialWidth <= 720 && initialHeight <= 480) {
+                if (initialWidth <= 720 && initialHeight <= 480 && refreshRate <= 60) {
                     // Max 5 buffered frames at 720x480x60
                     LimeLog.info("Patching level_idc to 31");
                     sps.levelIdc = 31;
                 }
-                else if (initialWidth <= 1280 && initialHeight <= 720) {
+                else if (initialWidth <= 1280 && initialHeight <= 720 && refreshRate <= 60) {
                     // Max 5 buffered frames at 1280x720x60
                     LimeLog.info("Patching level_idc to 32");
                     sps.levelIdc = 32;
                 }
-                else if (initialWidth <= 1920 && initialHeight <= 1080) {
+                else if (initialWidth <= 1920 && initialHeight <= 1080 && refreshRate <= 60) {
                     // Max 4 buffered frames at 1920x1080x64
                     LimeLog.info("Patching level_idc to 42");
                     sps.levelIdc = 42;
@@ -718,12 +761,16 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
             }
 
             // GFE 2.5.11 changed the SPS to add additional extensions
-            // Some devices don't like these so we remove them here.
-            sps.vuiParams.videoSignalTypePresentFlag = false;
-            sps.vuiParams.colourDescriptionPresentFlag = false;
-            sps.vuiParams.chromaLocInfoPresentFlag = false;
+            // Some devices don't like these so we remove them here on old devices.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+                sps.vuiParams.videoSignalTypePresentFlag = false;
+                sps.vuiParams.colourDescriptionPresentFlag = false;
+                sps.vuiParams.chromaLocInfoPresentFlag = false;
+            }
 
-            if ((needsSpsBitstreamFixup || isExynos4) && !refFrameInvalidationActive) {
+            // Some older devices used to choke on a bitstream restrictions, so we won't provide them
+            // unless explicitly whitelisted. For newer devices, leave the bitstream restrictions present.
+            if (needsSpsBitstreamFixup || isExynos4 || Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 // The SPS that comes in the current H264 bytestream doesn't set bitstream_restriction_flag
                 // or max_dec_frame_buffering which increases decoding latency on Tegra.
 
@@ -1014,18 +1061,39 @@ public class MediaCodecDecoderRenderer extends VideoDecoderRenderer {
             str += "HEVC Decoder: "+((renderer.hevcDecoder != null) ? renderer.hevcDecoder.getName():"(none)")+"\n";
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && renderer.avcDecoder != null) {
                 Range<Integer> avcWidthRange = renderer.avcDecoder.getCapabilitiesForType("video/avc").getVideoCapabilities().getSupportedWidths();
-                str += "AVC supported width range: "+avcWidthRange.getLower()+" - "+avcWidthRange.getUpper()+"\n";
+                str += "AVC supported width range: "+avcWidthRange+"\n";
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    try {
+                        Range<Double> avcFpsRange = renderer.avcDecoder.getCapabilitiesForType("video/avc").getVideoCapabilities().getAchievableFrameRatesFor(renderer.initialWidth, renderer.initialHeight);
+                        str += "AVC achievable FPS range: "+avcFpsRange+"\n";
+                    } catch (IllegalArgumentException e) {
+                        str += "AVC achievable FPS range: UNSUPPORTED!\n";
+                    }
+                }
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && renderer.hevcDecoder != null) {
                 Range<Integer> hevcWidthRange = renderer.hevcDecoder.getCapabilitiesForType("video/hevc").getVideoCapabilities().getSupportedWidths();
-                str += "HEVC supported width range: "+hevcWidthRange.getLower()+" - "+hevcWidthRange.getUpper()+"\n";
+                str += "HEVC supported width range: "+hevcWidthRange+"\n";
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    try {
+                        Range<Double> hevcFpsRange = renderer.hevcDecoder.getCapabilitiesForType("video/hevc").getVideoCapabilities().getAchievableFrameRatesFor(renderer.initialWidth, renderer.initialHeight);
+                        str += "HEVC achievable FPS range: " + hevcFpsRange + "\n";
+                    } catch (IllegalArgumentException e) {
+                        str += "HEVC achievable FPS range: UNSUPPORTED!\n";
+                    }
+                }
             }
+            str += "Configured format: "+renderer.configuredFormat+"\n";
+            str += "Input format: "+renderer.inputFormat+"\n";
+            str += "Output format: "+renderer.outputFormat+"\n";
             str += "Adaptive playback: "+renderer.adaptivePlayback+"\n";
             str += "GL Renderer: "+renderer.glRenderer+"\n";
             str += "Build fingerprint: "+Build.FINGERPRINT+"\n";
             str += "Foreground: "+renderer.foreground+"\n";
             str += "Consecutive crashes: "+renderer.consecutiveCrashCount+"\n";
             str += "RFI active: "+renderer.refFrameInvalidationActive+"\n";
+            str += "Using modern SPS patching: "+(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)+"\n";
+            str += "Low latency mode: "+renderer.lowLatency+"\n";
             str += "Video dimensions: "+renderer.initialWidth+"x"+renderer.initialHeight+"\n";
             str += "FPS target: "+renderer.refreshRate+"\n";
             str += "Bitrate: "+renderer.prefs.bitrate+" Kbps \n";

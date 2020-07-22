@@ -80,16 +80,16 @@ Java_com_limelight_nvstream_jni_MoonBridge_init(JNIEnv *env, jclass clazz) {
     BridgeDrStopMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeDrStop", "()V");
     BridgeDrCleanupMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeDrCleanup", "()V");
     BridgeDrSubmitDecodeUnitMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeDrSubmitDecodeUnit", "([BIIIJ)I");
-    BridgeArInitMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeArInit", "(I)I");
+    BridgeArInitMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeArInit", "(III)I");
     BridgeArStartMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeArStart", "()V");
     BridgeArStopMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeArStop", "()V");
     BridgeArCleanupMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeArCleanup", "()V");
     BridgeArPlaySampleMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeArPlaySample", "([S)V");
     BridgeClStageStartingMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeClStageStarting", "(I)V");
     BridgeClStageCompleteMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeClStageComplete", "(I)V");
-    BridgeClStageFailedMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeClStageFailed", "(IJ)V");
+    BridgeClStageFailedMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeClStageFailed", "(II)V");
     BridgeClConnectionStartedMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeClConnectionStarted", "()V");
-    BridgeClConnectionTerminatedMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeClConnectionTerminated", "(J)V");
+    BridgeClConnectionTerminatedMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeClConnectionTerminated", "(I)V");
     BridgeClRumbleMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeClRumble", "(SSS)V");
     BridgeClConnectionStatusUpdateMethod = (*env)->GetStaticMethodID(env, clazz, "bridgeClConnectionStatusUpdate", "(I)V");
 }
@@ -98,12 +98,9 @@ int BridgeDrSetup(int videoFormat, int width, int height, int redrawRate, void* 
     JNIEnv* env = GetThreadEnv();
     int err;
 
-    if ((*env)->ExceptionCheck(env)) {
-        return -1;
-    }
-
     err = (*env)->CallStaticIntMethod(env, GlobalBridgeClass, BridgeDrSetupMethod, videoFormat, width, height, redrawRate);
     if ((*env)->ExceptionCheck(env)) {
+        // This is called on a Java thread, so it's safe to return
         return -1;
     }
     else if (err != 0) {
@@ -119,19 +116,11 @@ int BridgeDrSetup(int videoFormat, int width, int height, int redrawRate, void* 
 void BridgeDrStart(void) {
     JNIEnv* env = GetThreadEnv();
 
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
-
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeDrStartMethod);
 }
 
 void BridgeDrStop(void) {
     JNIEnv* env = GetThreadEnv();
-
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
 
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeDrStopMethod);
 }
@@ -141,20 +130,12 @@ void BridgeDrCleanup(void) {
 
     (*env)->DeleteGlobalRef(env, DecodedFrameBuffer);
 
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
-
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeDrCleanupMethod);
 }
 
 int BridgeDrSubmitDecodeUnit(PDECODE_UNIT decodeUnit) {
     JNIEnv* env = GetThreadEnv();
     int ret;
-
-    if ((*env)->ExceptionCheck(env)) {
-        return DR_OK;
-    }
 
     // Increase the size of our frame data buffer if our frame won't fit
     if ((*env)->GetArrayLength(env, DecodedFrameBuffer) < decodeUnit->fullLength) {
@@ -176,8 +157,10 @@ int BridgeDrSubmitDecodeUnit(PDECODE_UNIT decodeUnit) {
 
             ret = (*env)->CallStaticIntMethod(env, GlobalBridgeClass, BridgeDrSubmitDecodeUnitMethod,
                                               DecodedFrameBuffer, currentEntry->length, currentEntry->bufferType,
-                                              decodeUnit->frameNumber, decodeUnit->receiveTimeMs);
+                                              decodeUnit->frameNumber, (jlong)decodeUnit->receiveTimeMs);
             if ((*env)->ExceptionCheck(env)) {
+                // We will crash here
+                (*JVM)->DetachCurrentThread(JVM);
                 return DR_OK;
             }
             else if (ret != DR_OK) {
@@ -192,22 +175,27 @@ int BridgeDrSubmitDecodeUnit(PDECODE_UNIT decodeUnit) {
         currentEntry = currentEntry->next;
     }
 
-    return (*env)->CallStaticIntMethod(env, GlobalBridgeClass, BridgeDrSubmitDecodeUnitMethod,
+    ret = (*env)->CallStaticIntMethod(env, GlobalBridgeClass, BridgeDrSubmitDecodeUnitMethod,
                                        DecodedFrameBuffer, offset, BUFFER_TYPE_PICDATA,
                                        decodeUnit->frameNumber,
-                                       decodeUnit->receiveTimeMs);
+                                       (jlong)decodeUnit->receiveTimeMs);
+    if ((*env)->ExceptionCheck(env)) {
+        // We will crash here
+        (*JVM)->DetachCurrentThread(JVM);
+        return DR_OK;
+    }
+    else {
+        return ret;
+    }
 }
 
 int BridgeArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusConfig, void* context, int flags) {
     JNIEnv* env = GetThreadEnv();
     int err;
 
+    err = (*env)->CallStaticIntMethod(env, GlobalBridgeClass, BridgeArInitMethod, audioConfiguration, opusConfig->sampleRate, opusConfig->samplesPerFrame);
     if ((*env)->ExceptionCheck(env)) {
-        return -1;
-    }
-
-    err = (*env)->CallStaticIntMethod(env, GlobalBridgeClass, BridgeArInitMethod, audioConfiguration);
-    if ((*env)->ExceptionCheck(env)) {
+        // This is called on a Java thread, so it's safe to return
         err = -1;
     }
     if (err == 0) {
@@ -233,19 +221,11 @@ int BridgeArInit(int audioConfiguration, POPUS_MULTISTREAM_CONFIGURATION opusCon
 void BridgeArStart(void) {
     JNIEnv* env = GetThreadEnv();
 
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
-
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeArStartMethod);
 }
 
 void BridgeArStop(void) {
     JNIEnv* env = GetThreadEnv();
-
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
 
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeArStopMethod);
 }
@@ -257,21 +237,13 @@ void BridgeArCleanup() {
 
     (*env)->DeleteGlobalRef(env, DecodedAudioBuffer);
 
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
-
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeArCleanupMethod);
 }
 
 void BridgeArDecodeAndPlaySample(char* sampleData, int sampleLength) {
     JNIEnv* env = GetThreadEnv();
 
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
-
-    jshort* decodedData = (*env)->GetShortArrayElements(env, DecodedAudioBuffer, 0);
+    jshort* decodedData = (*env)->GetPrimitiveArrayCritical(env, DecodedAudioBuffer, NULL);
 
     int decodeLen = opus_multistream_decode(Decoder,
                                             (const unsigned char*)sampleData,
@@ -280,23 +252,23 @@ void BridgeArDecodeAndPlaySample(char* sampleData, int sampleLength) {
                                             OpusConfig.samplesPerFrame,
                                             0);
     if (decodeLen > 0) {
-        // We must release the array elements first to ensure the data is copied before the callback
-        (*env)->ReleaseShortArrayElements(env, DecodedAudioBuffer, decodedData, 0);
+        // We must release the array elements before making further JNI calls
+        (*env)->ReleasePrimitiveArrayCritical(env, DecodedAudioBuffer, decodedData, 0);
 
         (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeArPlaySampleMethod, DecodedAudioBuffer);
+        if ((*env)->ExceptionCheck(env)) {
+            // We will crash here
+            (*JVM)->DetachCurrentThread(JVM);
+        }
     }
     else {
         // We can abort here to avoid the copy back since no data was modified
-        (*env)->ReleaseShortArrayElements(env, DecodedAudioBuffer, decodedData, JNI_ABORT);
+        (*env)->ReleasePrimitiveArrayCritical(env, DecodedAudioBuffer, decodedData, JNI_ABORT);
     }
 }
 
 void BridgeClStageStarting(int stage) {
     JNIEnv* env = GetThreadEnv();
-
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
 
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClStageStartingMethod, stage);
 }
@@ -304,19 +276,11 @@ void BridgeClStageStarting(int stage) {
 void BridgeClStageComplete(int stage) {
     JNIEnv* env = GetThreadEnv();
 
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
-
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClStageCompleteMethod, stage);
 }
 
-void BridgeClStageFailed(int stage, long errorCode) {
+void BridgeClStageFailed(int stage, int errorCode) {
     JNIEnv* env = GetThreadEnv();
-
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
 
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClStageFailedMethod, stage, errorCode);
 }
@@ -324,41 +288,41 @@ void BridgeClStageFailed(int stage, long errorCode) {
 void BridgeClConnectionStarted(void) {
     JNIEnv* env = GetThreadEnv();
 
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
-
-    (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClConnectionStartedMethod, NULL);
+    (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClConnectionStartedMethod);
 }
 
-void BridgeClConnectionTerminated(long errorCode) {
+void BridgeClConnectionTerminated(int errorCode) {
     JNIEnv* env = GetThreadEnv();
 
-    if ((*env)->ExceptionCheck(env)) {
-        return;
-    }
-
     (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClConnectionTerminatedMethod, errorCode);
+    if ((*env)->ExceptionCheck(env)) {
+        // We will crash here
+        (*JVM)->DetachCurrentThread(JVM);
+    }
 }
 
 void BridgeClRumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor) {
     JNIEnv* env = GetThreadEnv();
 
+    // The seemingly redundant short casts are required in order to convert the unsigned short to a signed short.
+    // If we leave it as an unsigned short, CheckJNI will fail when the value exceeds 32767. The cast itself is
+    // fine because the Java code treats the value as unsigned even though it's stored in a signed type.
+    (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClRumbleMethod, controllerNumber, (short)lowFreqMotor, (short)highFreqMotor);
     if ((*env)->ExceptionCheck(env)) {
-        return;
+        // We will crash here
+        (*JVM)->DetachCurrentThread(JVM);
     }
-
-    (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClRumbleMethod, controllerNumber, lowFreqMotor, highFreqMotor);
 }
 
 void BridgeClConnectionStatusUpdate(int connectionStatus) {
     JNIEnv* env = GetThreadEnv();
 
+    (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClConnectionStatusUpdateMethod, connectionStatus);
     if ((*env)->ExceptionCheck(env)) {
+        // We will crash here
+        (*JVM)->DetachCurrentThread(JVM);
         return;
     }
-
-    (*env)->CallStaticVoidMethod(env, GlobalBridgeClass, BridgeClConnectionStatusUpdateMethod, connectionStatus);
 }
 
 void BridgeClLogMessage(const char* format, ...) {
@@ -382,6 +346,7 @@ static AUDIO_RENDERER_CALLBACKS BridgeAudioRendererCallbacks = {
         .stop = BridgeArStop,
         .cleanup = BridgeArCleanup,
         .decodeAndPlaySample = BridgeArDecodeAndPlaySample,
+        .capabilities = CAPABILITY_SUPPORTS_ARBITRARY_AUDIO_DURATION
 };
 
 static CONNECTION_LISTENER_CALLBACKS BridgeConnListenerCallbacks = {

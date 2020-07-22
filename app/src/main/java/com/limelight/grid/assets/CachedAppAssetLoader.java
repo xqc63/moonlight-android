@@ -6,9 +6,12 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.AsyncTask;
 import android.view.View;
+import android.view.animation.Animation;
+import android.view.animation.AnimationUtils;
 import android.widget.ImageView;
-import android.widget.ProgressBar;
+import android.widget.TextView;
 
+import com.limelight.R;
 import com.limelight.nvstream.http.ComputerDetails;
 import com.limelight.nvstream.http.NvApp;
 
@@ -52,15 +55,17 @@ public class CachedAppAssetLoader {
     private final MemoryAssetLoader memoryLoader;
     private final DiskAssetLoader diskLoader;
     private final Bitmap placeholderBitmap;
+    private final Bitmap noAppImageBitmap;
 
     public CachedAppAssetLoader(ComputerDetails computer, double scalingDivider,
                                 NetworkAssetLoader networkLoader, MemoryAssetLoader memoryLoader,
-                                DiskAssetLoader diskLoader) {
+                                DiskAssetLoader diskLoader, Bitmap noAppImageBitmap) {
         this.computer = computer;
         this.scalingDivider = scalingDivider;
         this.networkLoader = networkLoader;
         this.memoryLoader = memoryLoader;
         this.diskLoader = diskLoader;
+        this.noAppImageBitmap = noAppImageBitmap;
         this.placeholderBitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
     }
 
@@ -87,7 +92,7 @@ public class CachedAppAssetLoader {
         memoryLoader.clearCache();
     }
 
-    private Bitmap doNetworkAssetLoad(LoaderTuple tuple, LoaderTask task) {
+    private ScaledBitmap doNetworkAssetLoad(LoaderTuple tuple, LoaderTask task) {
         // Try 3 times
         for (int i = 0; i < 3; i++) {
             // Check again whether we've been cancelled or the image view is gone
@@ -108,7 +113,7 @@ public class CachedAppAssetLoader {
                 // If there's a task associated with this load, we should return the bitmap
                 if (task != null) {
                     // If the cached bitmap is valid, return it. Otherwise, we'll try the load again
-                    Bitmap bmp = diskLoader.loadBitmapFromCache(tuple, (int) scalingDivider);
+                    ScaledBitmap bmp = diskLoader.loadBitmapFromCache(tuple, (int) scalingDivider);
                     if (bmp != null) {
                         return bmp;
                     }
@@ -130,29 +135,29 @@ public class CachedAppAssetLoader {
         return null;
     }
 
-    private class LoaderTask extends AsyncTask<LoaderTuple, Void, Bitmap> {
+    private class LoaderTask extends AsyncTask<LoaderTuple, Void, ScaledBitmap> {
         private final WeakReference<ImageView> imageViewRef;
-        private final WeakReference<ProgressBar> progressViewRef;
+        private final WeakReference<TextView> textViewRef;
         private final boolean diskOnly;
 
         private LoaderTuple tuple;
 
-        public LoaderTask(ImageView imageView, ProgressBar prgView, boolean diskOnly) {
+        public LoaderTask(ImageView imageView, TextView textView, boolean diskOnly) {
             this.imageViewRef = new WeakReference<>(imageView);
-            this.progressViewRef = new WeakReference<>(prgView);
+            this.textViewRef = new WeakReference<>(textView);
             this.diskOnly = diskOnly;
         }
 
         @Override
-        protected Bitmap doInBackground(LoaderTuple... params) {
+        protected ScaledBitmap doInBackground(LoaderTuple... params) {
             tuple = params[0];
 
             // Check whether it has been cancelled or the views are gone
-            if (isCancelled() || imageViewRef.get() == null || progressViewRef.get() == null) {
+            if (isCancelled() || imageViewRef.get() == null || textViewRef.get() == null) {
                 return null;
             }
 
-            Bitmap bmp = diskLoader.loadBitmapFromCache(tuple, (int) scalingDivider);
+            ScaledBitmap bmp = diskLoader.loadBitmapFromCache(tuple, (int) scalingDivider);
             if (bmp == null) {
                 if (!diskOnly) {
                     // Try to load the asset from the network
@@ -181,44 +186,61 @@ public class CachedAppAssetLoader {
 
             // If the current loader task for this view isn't us, do nothing
             final ImageView imageView = imageViewRef.get();
-            final ProgressBar prgView = progressViewRef.get();
+            final TextView textView = textViewRef.get();
             if (getLoaderTask(imageView) == this) {
-                // Now display the progress bar since we have to hit the network
-                if (prgView != null) {
-                    prgView.setVisibility(View.VISIBLE);
-                }
-
-                // Set off another loader task on the network executor
-                LoaderTask task = new LoaderTask(imageView, prgView, false);
-                AsyncDrawable asyncDrawable = new AsyncDrawable(imageView.getResources(), placeholderBitmap, task);
-                imageView.setVisibility(View.VISIBLE);
+                // Set off another loader task on the network executor. This time our AsyncDrawable
+                // will use the app image placeholder bitmap, rather than an empty bitmap.
+                LoaderTask task = new LoaderTask(imageView, textView, false);
+                AsyncDrawable asyncDrawable = new AsyncDrawable(imageView.getResources(), noAppImageBitmap, task);
                 imageView.setImageDrawable(asyncDrawable);
+                imageView.startAnimation(AnimationUtils.loadAnimation(imageView.getContext(), R.anim.boxart_fadein));
+                imageView.setVisibility(View.VISIBLE);
+                textView.setVisibility(View.VISIBLE);
                 task.executeOnExecutor(networkExecutor, tuple);
             }
         }
 
         @Override
-        protected void onPostExecute(Bitmap bitmap) {
+        protected void onPostExecute(final ScaledBitmap bitmap) {
             // Do nothing if cancelled
             if (isCancelled()) {
                 return;
             }
 
             final ImageView imageView = imageViewRef.get();
-            final ProgressBar prgView = progressViewRef.get();
+            final TextView textView = textViewRef.get();
             if (getLoaderTask(imageView) == this) {
-                // Set the bitmap
+                // Fade in the box art
                 if (bitmap != null) {
-                    imageView.setImageBitmap(bitmap);
-                }
+                    // Show the text if it's a placeholder
+                    textView.setVisibility(isBitmapPlaceholder(bitmap) ? View.VISIBLE : View.GONE);
 
-                // Hide the progress bar
-                if (prgView != null) {
-                    prgView.setVisibility(View.INVISIBLE);
-                }
+                    if (imageView.getVisibility() == View.VISIBLE) {
+                        // Fade out the placeholder first
+                        Animation fadeOutAnimation = AnimationUtils.loadAnimation(imageView.getContext(), R.anim.boxart_fadeout);
+                        fadeOutAnimation.setAnimationListener(new Animation.AnimationListener() {
+                            @Override
+                            public void onAnimationStart(Animation animation) {}
 
-                // Show the view
-                imageView.setVisibility(View.VISIBLE);
+                            @Override
+                            public void onAnimationEnd(Animation animation) {
+                                // Fade in the new box art
+                                imageView.setImageBitmap(bitmap.bitmap);
+                                imageView.startAnimation(AnimationUtils.loadAnimation(imageView.getContext(), R.anim.boxart_fadein));
+                            }
+
+                            @Override
+                            public void onAnimationRepeat(Animation animation) {}
+                        });
+                        imageView.startAnimation(fadeOutAnimation);
+                    }
+                    else {
+                        // View is invisible already, so just fade in the new art
+                        imageView.setImageBitmap(bitmap.bitmap);
+                        imageView.startAnimation(AnimationUtils.loadAnimation(imageView.getContext(), R.anim.boxart_fadein));
+                        imageView.setVisibility(View.VISIBLE);
+                    }
+                }
             }
         }
     }
@@ -296,7 +318,13 @@ public class CachedAppAssetLoader {
         });
     }
 
-    public boolean populateImageView(NvApp app, ImageView imgView, ProgressBar prgView) {
+    private boolean isBitmapPlaceholder(ScaledBitmap bitmap) {
+        return (bitmap == null) ||
+                (bitmap.originalWidth == 130 && bitmap.originalHeight == 180) || // GFE 2.0
+                (bitmap.originalWidth == 628 && bitmap.originalHeight == 888); // GFE 3.0
+    }
+
+    public boolean populateImageView(NvApp app, ImageView imgView, TextView textView) {
         LoaderTuple tuple = new LoaderTuple(computer, app);
 
         // If there's already a task in progress for this view,
@@ -306,22 +334,26 @@ public class CachedAppAssetLoader {
             return true;
         }
 
-        // Hide the progress bar always on initial load
-        prgView.setVisibility(View.INVISIBLE);
+        // Always set the name text so we have it if needed later
+        textView.setText(app.getAppName());
 
         // First, try the memory cache in the current context
-        Bitmap bmp = memoryLoader.loadBitmapFromCache(tuple);
+        ScaledBitmap bmp = memoryLoader.loadBitmapFromCache(tuple);
         if (bmp != null) {
             // Show the bitmap immediately
             imgView.setVisibility(View.VISIBLE);
-            imgView.setImageBitmap(bmp);
+            imgView.setImageBitmap(bmp.bitmap);
+
+            // Show the text if it's a placeholder bitmap
+            textView.setVisibility(isBitmapPlaceholder(bmp) ? View.VISIBLE : View.GONE);
             return true;
         }
 
         // If it's not in memory, create an async task to load it. This task will be attached
         // via AsyncDrawable to this view.
-        final LoaderTask task = new LoaderTask(imgView, prgView, true);
+        final LoaderTask task = new LoaderTask(imgView, textView, true);
         final AsyncDrawable asyncDrawable = new AsyncDrawable(imgView.getResources(), placeholderBitmap, task);
+        textView.setVisibility(View.INVISIBLE);
         imgView.setVisibility(View.INVISIBLE);
         imgView.setImageDrawable(asyncDrawable);
 
@@ -330,7 +362,7 @@ public class CachedAppAssetLoader {
         return false;
     }
 
-    public class LoaderTuple {
+    public static class LoaderTuple {
         public final ComputerDetails computer;
         public final NvApp app;
 

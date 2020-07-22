@@ -94,8 +94,6 @@
   <string name="summary_checkbox_disable_warnings">Verberg on-screen verbindingswaarschuwingen tijdens het streamen</string>
 
   <string name="category_audio_settings">Geluidsinstellingen</string>
-  <string name="title_checkbox_51_surround">Gebruik 5.1 surround sound</string>
-  <string name="summary_checkbox_51_surround">Gebruik dit niet als er problemen zijn met de audio. Vereist GFE 2.7 of hoger.</string>
 
   <string name="title_checkbox_multi_controller">Multi-gamepad support</string>
   <string name="summary_checkbox_multi_controller">Wanneer uitgevinkt, alle controllers verschijnen als één.</string>
@@ -111,8 +109,6 @@
   <string name="category_ui_settings">UI Installingen</string>
   <string name="title_language_list">Taal</string>
   <string name="summary_language_list">Taal te gebruiken in Moonlight</string>
-  <string name="title_checkbox_list_mode">Gebruik lijsten in plaats van kolommen</string>
-  <string name="summary_checkbox_list_mode">Display apps and PCs in lists instead of grids</string>
   <string name="title_checkbox_small_icon_mode">Gebruik kleine iconen</string>
   <string name="summary_checkbox_small_icon_mode">Gebruik kleine iconen in kolom onderdelen zodat meer items tegelijk zichtbaar worden.</string>
 
@@ -125,5 +121,6 @@
   <string name="category_advanced_settings">Geavanceerde Instellingen</string>
   <string name="title_video_format">Verander H.265 instellingen</string>
   <string name="summary_video_format">H.265 verlaagt video bandbreedte vereisten maar benodigdt een recent apparaat.</string>
+    <string name="suffix_osc_opacity">%</string>
 
 </resources>

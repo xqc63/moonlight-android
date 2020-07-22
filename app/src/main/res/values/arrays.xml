@@ -9,12 +9,12 @@
         <item>4K</item>
     </string-array>
     <string-array name="resolution_values" translatable="false">
-        <item>360p</item>
-        <item>480p</item>
-        <item>720p</item>
-        <item>1080p</item>
-        <item>1440p</item>
-        <item>4K</item>
+        <item>640x360</item>
+        <item>854x480</item>
+        <item>1280x720</item>
+        <item>1920x1080</item>
+        <item>2560x1440</item>
+        <item>3840x2160</item>
     </string-array>
 
     <string-array name="fps_names">
@@ -30,31 +30,48 @@
         <item>120</item>
     </string-array>
 
+    <string-array name="audio_config_names">
+        <item>Stereo</item>
+        <item>5.1 Surround Sound</item>
+        <item>7.1 Surround Sound</item>
+    </string-array>
+    <string-array name="audio_config_values" translatable="false">
+        <item>2</item>
+        <item>51</item>
+        <item>71</item>
+    </string-array>
+
     <string-array name="language_names" translatable="false">
-            <item>Default</item>
-            <item>English</item>
-            <item>Italiano</item>
-            <item>日本語</item>
-            <item>Русский</item>
-            <item>Nederlands</item>
-            <item>中文(简体)</item>
-            <item>中文(繁體)</item>
-            <item>Korean</item>
-            <item>Español</item>
-            <item>French</item>
+        <item>Default</item>
+        <item>English</item>
+        <item>Italiano</item>
+        <item>日本語</item>
+        <item>Русский</item>
+        <item>Nederlands</item>
+        <item>中文(简体)</item>
+        <item>中文(繁體)</item>
+        <item>Korean</item>
+        <item>Español</item>
+        <item>Français</item>
+        <item>Deutsch</item>
+        <item>Română</item>
+        <item>Українська</item>
     </string-array>
     <string-array name="language_values" translatable="false">
-            <item>default</item>
-            <item>en</item>
-            <item>it</item>
-            <item>ja</item>
-            <item>ru</item>
-            <item>nl</item>
-            <item>zh-CN</item>
-            <item>zh-TW</item>
-            <item>ko</item>
-            <item>es</item>
-            <item>fr</item>
+        <item>default</item>
+        <item>en</item>
+        <item>it</item>
+        <item>ja</item>
+        <item>ru</item>
+        <item>nl</item>
+        <item>zh-CN</item>
+        <item>zh-TW</item>
+        <item>ko</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>de</item>
+        <item>ro</item>
+        <item>uk</item>
     </string-array>
 
     <string-array name="decoder_names">

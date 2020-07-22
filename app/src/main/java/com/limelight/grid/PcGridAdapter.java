@@ -22,15 +22,7 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
     }
 
     private static int getLayoutIdForPreferences(PreferenceConfiguration prefs) {
-        if (prefs.listMode) {
-            return R.layout.simple_row;
-        }
-        else if (prefs.smallIconMode) {
-            return R.layout.pc_grid_item_small;
-        }
-        else {
-            return R.layout.pc_grid_item;
-        }
+        return R.layout.pc_grid_item;
     }
 
     public void updateLayoutWithPreferences(Context context, PreferenceConfiguration prefs) {
@@ -57,7 +49,8 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
     }
 
     @Override
-    public boolean populateImageView(ImageView imgView, ProgressBar prgView, PcView.ComputerObject obj) {
+    public void populateView(ImageView imgView, ProgressBar prgView, TextView txtView, ImageView overlayView, PcView.ComputerObject obj) {
+        imgView.setImageResource(R.drawable.ic_computer);
         if (obj.details.state == ComputerDetails.State.ONLINE) {
             imgView.setAlpha(1.0f);
         }
@@ -72,12 +65,7 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
             prgView.setVisibility(View.INVISIBLE);
         }
 
-        imgView.setImageResource(R.drawable.ic_computer);
-        return true;
-    }
-
-    @Override
-    public boolean populateTextView(TextView txtView, PcView.ComputerObject obj) {
+        txtView.setText(obj.details.name);
         if (obj.details.state == ComputerDetails.State.ONLINE) {
             txtView.setAlpha(1.0f);
         }
@@ -85,16 +73,10 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
             txtView.setAlpha(0.4f);
         }
 
-        // Return false to use the computer's toString method
-        return false;
-    }
-
-    @Override
-    public boolean populateOverlayView(ImageView overlayView, PcView.ComputerObject obj) {
         if (obj.details.state == ComputerDetails.State.OFFLINE) {
             overlayView.setImageResource(R.drawable.ic_pc_offline);
             overlayView.setAlpha(0.4f);
-            return true;
+            overlayView.setVisibility(View.VISIBLE);
         }
         // We must check if the status is exactly online and unpaired
         // to avoid colliding with the loading spinner when status is unknown
@@ -102,8 +84,10 @@ public class PcGridAdapter extends GenericGridAdapter<PcView.ComputerObject> {
                 obj.details.pairState == PairingManager.PairState.NOT_PAIRED) {
             overlayView.setImageResource(R.drawable.ic_lock);
             overlayView.setAlpha(1.0f);
-            return true;
+            overlayView.setVisibility(View.VISIBLE);
         }
-        return false;
+        else {
+            overlayView.setVisibility(View.GONE);
+        }
     }
 }

@@ -42,6 +42,7 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:installLocation="auto"
+        android:gwpAsanMode="always"
         android:theme="@style/AppTheme">
         <provider
             android:name=".PosterContentProvider"
@@ -120,7 +121,8 @@
             android:resizeableActivity="true"
             android:launchMode="singleTask"
             android:excludeFromRecents="true"
-            android:theme="@style/StreamTheme">
+            android:theme="@style/StreamTheme"
+            android:preferMinimalPostProcessing="true">
             <meta-data
                 android:name="android.support.PARENT_ACTIVITY"
                 android:value="com.limelight.AppView" />

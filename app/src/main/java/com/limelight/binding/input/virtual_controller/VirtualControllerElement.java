@@ -43,7 +43,8 @@ public abstract class VirtualControllerElement extends View {
 
     private int normalColor = 0xF0888888;
     protected int pressedColor = 0xF00000FF;
-    private int configNormalColor = 0xF0FF0000;
+    private int configMoveColor = 0xF0FF0000;
+    private int configResizeColor = 0xF0FF00FF;
     private int configSelectedColor = 0xF000FF00;
 
     protected int startSize_x;
@@ -112,34 +113,34 @@ public abstract class VirtualControllerElement extends View {
 
     /*
     protected void actionShowNormalColorChooser() {
-		AmbilWarnaDialog colorDialog = new AmbilWarnaDialog(getContext(), normalColor, true, new AmbilWarnaDialog.OnAmbilWarnaListener() {
-			@Override
-			public void onCancel(AmbilWarnaDialog dialog)
-			{}
+        AmbilWarnaDialog colorDialog = new AmbilWarnaDialog(getContext(), normalColor, true, new AmbilWarnaDialog.OnAmbilWarnaListener() {
+            @Override
+            public void onCancel(AmbilWarnaDialog dialog)
+            {}
 
-			@Override
-			public void onOk(AmbilWarnaDialog dialog, int color) {
-				normalColor = color;
-				invalidate();
-			}
-		});
-		colorDialog.show();
-	}
+            @Override
+            public void onOk(AmbilWarnaDialog dialog, int color) {
+                normalColor = color;
+                invalidate();
+            }
+        });
+        colorDialog.show();
+    }
 
-	protected void actionShowPressedColorChooser() {
-		AmbilWarnaDialog colorDialog = new AmbilWarnaDialog(getContext(), normalColor, true, new AmbilWarnaDialog.OnAmbilWarnaListener() {
-			@Override
-			public void onCancel(AmbilWarnaDialog dialog) {
-			}
+    protected void actionShowPressedColorChooser() {
+        AmbilWarnaDialog colorDialog = new AmbilWarnaDialog(getContext(), normalColor, true, new AmbilWarnaDialog.OnAmbilWarnaListener() {
+            @Override
+            public void onCancel(AmbilWarnaDialog dialog) {
+            }
 
-			@Override
-			public void onOk(AmbilWarnaDialog dialog, int color) {
-				pressedColor = color;
-				invalidate();
-			}
-		});
-		colorDialog.show();
-	}
+            @Override
+            public void onOk(AmbilWarnaDialog dialog, int color) {
+                pressedColor = color;
+                invalidate();
+            }
+        });
+        colorDialog.show();
+    }
     */
 
     protected void actionEnableMove() {
@@ -156,8 +157,12 @@ public abstract class VirtualControllerElement extends View {
     }
 
     protected int getDefaultColor() {
-        return (virtualController.getControllerMode() == VirtualController.ControllerMode.Configuration) ?
-                configNormalColor : normalColor;
+        if (virtualController.getControllerMode() == VirtualController.ControllerMode.MoveButtons)
+            return configMoveColor;
+        else if (virtualController.getControllerMode() == VirtualController.ControllerMode.ResizeButtons)
+            return configResizeColor;
+        else
+            return normalColor;
     }
 
     protected int getDefaultStrokeWidth() {
@@ -195,11 +200,11 @@ public abstract class VirtualControllerElement extends View {
                         break;
                     }
                 /*
-                case 2:	{ // set default color
+                case 2: { // set default color
                     actionShowNormalColorChooser();
                     break;
                 }
-                case 3:	{ // set pressed color
+                case 3: { // set pressed color
                     actionShowPressedColorChooser();
                     break;
                 }
@@ -230,7 +235,10 @@ public abstract class VirtualControllerElement extends View {
                 startSize_x = getWidth();
                 startSize_y = getHeight();
 
-                actionEnableMove();
+                if (virtualController.getControllerMode() == VirtualController.ControllerMode.MoveButtons)
+                    actionEnableMove();
+                else if (virtualController.getControllerMode() == VirtualController.ControllerMode.ResizeButtons)
+                    actionEnableResize();
 
                 return true;
             }
@@ -283,6 +291,15 @@ public abstract class VirtualControllerElement extends View {
     public void setColors(int normalColor, int pressedColor) {
         this.normalColor = normalColor;
         this.pressedColor = pressedColor;
+
+        invalidate();
+    }
+
+
+    public void setOpacity(int opacity) {
+        int hexOpacity = opacity * 255 / 100;
+        this.normalColor = (hexOpacity << 24) | (normalColor & 0x00FFFFFF);
+        this.pressedColor = (hexOpacity << 24) | (pressedColor & 0x00FFFFFF);
 
         invalidate();
     }

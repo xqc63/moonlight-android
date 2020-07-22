@@ -1,5 +1,6 @@
 package com.limelight.preferences;
 
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.MediaCodecInfo;
@@ -7,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.app.Activity;
 import android.os.Handler;
+import android.os.Vibrator;
 import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceCategory;
@@ -54,9 +56,7 @@ public class StreamSettings extends Activity {
 
         // Check for changes that require a UI reload to take effect
         PreferenceConfiguration newPrefs = PreferenceConfiguration.readPreferences(this);
-        if (newPrefs.listMode != previousPrefs.listMode ||
-                newPrefs.smallIconMode != previousPrefs.smallIconMode ||
-                !newPrefs.language.equals(previousPrefs.language)) {
+        if (!newPrefs.language.equals(previousPrefs.language)) {
             // Restart the PC view to apply UI changes
             Intent intent = new Intent(this, PcView.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -141,16 +141,40 @@ public class StreamSettings extends Activity {
             // hide on-screen controls category on non touch screen devices
             if (!getActivity().getPackageManager().
                     hasSystemFeature("android.hardware.touchscreen")) {
-                PreferenceCategory category =
-                        (PreferenceCategory) findPreference("category_onscreen_controls");
-                screen.removePreference(category);
+                {
+                    PreferenceCategory category =
+                            (PreferenceCategory) findPreference("category_onscreen_controls");
+                    screen.removePreference(category);
+                }
+
+                {
+                    PreferenceCategory category =
+                            (PreferenceCategory) findPreference("category_input_settings");
+                    category.removePreference(findPreference("checkbox_touchscreen_trackpad"));
+                }
             }
 
-            // Remove PiP mode on devices pre-Oreo
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            // Remove PiP mode on devices pre-Oreo, where the feature is not available (some low RAM devices),
+            // and on Fire OS where it violates the Amazon App Store guidelines for some reason.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                    !getActivity().getPackageManager().hasSystemFeature("android.software.picture_in_picture") ||
+                    getActivity().getPackageManager().hasSystemFeature("com.amazon.software.fireos")) {
                 PreferenceCategory category =
-                        (PreferenceCategory) findPreference("category_basic_settings");
+                        (PreferenceCategory) findPreference("category_ui_settings");
                 category.removePreference(findPreference("checkbox_enable_pip"));
+            }
+
+            // Remove the vibration options if the device can't vibrate
+            if (!((Vibrator)getActivity().getSystemService(Context.VIBRATOR_SERVICE)).hasVibrator()) {
+                PreferenceCategory category =
+                        (PreferenceCategory) findPreference("category_input_settings");
+                category.removePreference(findPreference("checkbox_vibrate_fallback"));
+
+                // The entire OSC category may have already been removed by the touchscreen check above
+                category = (PreferenceCategory) findPreference("category_onscreen_controls");
+                if (category != null) {
+                    category.removePreference(findPreference("checkbox_vibrate_osc"));
+                }
             }
 
             int maxSupportedFps = 0;
@@ -241,33 +265,33 @@ public class StreamSettings extends Activity {
                 if (maxSupportedResW != 0) {
                     if (maxSupportedResW < 3840) {
                         // 4K is unsupported
-                        removeValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, "4K", new Runnable() {
+                        removeValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.RES_4K, new Runnable() {
                             @Override
                             public void run() {
                                 SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(SettingsFragment.this.getActivity());
-                                setValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, "1440p");
+                                setValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.RES_1440P);
                                 resetBitrateToDefault(prefs, null, null);
                             }
                         });
                     }
                     if (maxSupportedResW < 2560) {
                         // 1440p is unsupported
-                        removeValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, "1440p", new Runnable() {
+                        removeValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.RES_1440P, new Runnable() {
                             @Override
                             public void run() {
                                 SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(SettingsFragment.this.getActivity());
-                                setValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, "1080p");
+                                setValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.RES_1080P);
                                 resetBitrateToDefault(prefs, null, null);
                             }
                         });
                     }
                     if (maxSupportedResW < 1920) {
                         // 1080p is unsupported
-                        removeValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, "1080p", new Runnable() {
+                        removeValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.RES_1080P, new Runnable() {
                             @Override
                             public void run() {
                                 SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(SettingsFragment.this.getActivity());
-                                setValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, "720p");
+                                setValue(PreferenceConfiguration.RESOLUTION_PREF_STRING, PreferenceConfiguration.RES_720P);
                                 resetBitrateToDefault(prefs, null, null);
                             }
                         });
@@ -302,12 +326,24 @@ public class StreamSettings extends Activity {
                 // Never remove 30 FPS or 60 FPS
             }
 
+            // Android L introduces proper 7.1 surround sound support. Remove the 7.1 option
+            // for earlier versions of Android to prevent AudioTrack initialization issues.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+                LimeLog.info("Excluding 7.1 surround sound option based on OS");
+                removeValue(PreferenceConfiguration.AUDIO_CONFIG_PREF_STRING, "71", new Runnable() {
+                    @Override
+                    public void run() {
+                        setValue(PreferenceConfiguration.AUDIO_CONFIG_PREF_STRING, "51");
+                    }
+                });
+            }
+
             // Android L introduces the drop duplicate behavior of releaseOutputBuffer()
             // that the unlock FPS option relies on to not massively increase latency.
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
                 LimeLog.info("Excluding unlock FPS toggle based on OS");
                 PreferenceCategory category =
-                        (PreferenceCategory) findPreference("category_basic_settings");
+                        (PreferenceCategory) findPreference("category_advanced_settings");
                 category.removePreference(findPreference("checkbox_unlock_fps"));
             }
             else {

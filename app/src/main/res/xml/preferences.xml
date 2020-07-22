@@ -10,7 +10,7 @@
             android:summary="@string/summary_resolution_list"
             android:entries="@array/resolution_names"
             android:entryValues="@array/resolution_values"
-            android:defaultValue="720p" />
+            android:defaultValue="1280x720" />
         <ListPreference
             android:key="list_fps"
             android:title="@string/title_fps_list"
@@ -28,34 +28,32 @@
             android:text="@string/suffix_seekbar_bitrate"
             android:title="@string/title_seekbar_bitrate" />
         <CheckBoxPreference
-            android:key="checkbox_unlock_fps"
-            android:title="@string/title_unlock_fps"
-            android:summary="@string/summary_unlock_fps"
-            android:defaultValue="false" />
-        <CheckBoxPreference
             android:key="checkbox_stretch_video"
             android:title="@string/title_checkbox_stretch_video"
             android:defaultValue="false" />
-        <CheckBoxPreference
-            android:key="checkbox_enable_pip"
-            android:title="@string/title_checkbox_enable_pip"
-            android:summary="@string/summary_checkbox_enable_pip"
-            android:defaultValue="false" />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/category_audio_settings">
-        <CheckBoxPreference
-            android:key="checkbox_51_surround"
-            android:title="@string/title_checkbox_51_surround"
-            android:summary="@string/summary_checkbox_51_surround"
-            android:defaultValue="false" />
+        <ListPreference
+            android:key="list_audio_config"
+            android:title="@string/title_audio_config_list"
+            android:summary="@string/summary_audio_config_list"
+            android:entries="@array/audio_config_names"
+            android:entryValues="@array/audio_config_values"
+            android:defaultValue="2" />
     </PreferenceCategory>
-    <PreferenceCategory android:title="@string/category_input_settings">
+    <PreferenceCategory android:title="@string/category_input_settings"
+        android:key="category_input_settings">
         <!--com.limelight.preferences.SeekBarPreference
             android:key="seekbar_deadzone"
             android:defaultValue="15"
             android:max="50"
             android:text="@string/suffix_seekbar_deadzone"
             android:title="@string/title_seekbar_deadzone"/-->
+        <CheckBoxPreference
+            android:key="checkbox_touchscreen_trackpad"
+            android:title="@string/title_checkbox_touchscreen_trackpad"
+            android:summary="@string/summary_checkbox_touchscreen_trackpad"
+            android:defaultValue="true" />
         <CheckBoxPreference
             android:key="checkbox_multi_controller"
             android:title="@string/title_checkbox_multi_controller"
@@ -87,6 +85,11 @@
             android:title="@string/title_checkbox_vibrate_fallback"
             android:summary="@string/summary_checkbox_vibrate_fallback"
             android:defaultValue="false" />
+        <CheckBoxPreference
+            android:key="checkbox_flip_face_buttons"
+            android:title="@string/title_checkbox_flip_face_buttons"
+            android:summary="@string/summary_checkbox_flip_face_buttons"
+            android:defaultValue="false" />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/category_on_screen_controls_settings"
         android:key="category_onscreen_controls">
@@ -107,6 +110,17 @@
             android:key="checkbox_only_show_L3R3"
             android:summary="@string/summary_only_l3r3"
             android:title="@string/title_only_l3r3" />
+        <com.limelight.preferences.SeekBarPreference
+            android:key="seekbar_osc_opacity"
+            android:dependency="checkbox_show_onscreen_controls"
+            android:dialogMessage="@string/summary_osc_opacity"
+            seekbar:min="0"
+            seekbar:step="1"
+            android:max="100"
+            android:defaultValue="90"
+            android:summary="@string/summary_osc_opacity"
+            android:text="@string/suffix_osc_opacity"
+            android:title="@string/dialog_title_osc_opacity" />
         <com.limelight.preferences.ConfirmDeleteOscPreference
             android:title="@string/title_reset_osc"
             android:summary="@string/summary_reset_osc"
@@ -129,7 +143,13 @@
             android:summary="@string/summary_checkbox_host_audio"
             android:defaultValue="false" />
     </PreferenceCategory>
-    <PreferenceCategory android:title="@string/category_ui_settings">
+    <PreferenceCategory android:title="@string/category_ui_settings"
+        android:key="category_ui_settings">
+        <CheckBoxPreference
+            android:key="checkbox_enable_pip"
+            android:title="@string/title_checkbox_enable_pip"
+            android:summary="@string/summary_checkbox_enable_pip"
+            android:defaultValue="false" />
         <ListPreference
             android:key="list_languages"
             android:title="@string/title_language_list"
@@ -141,14 +161,14 @@
             android:key="checkbox_small_icon_mode"
             android:title="@string/title_checkbox_small_icon_mode"
             android:summary="@string/summary_checkbox_small_icon_mode" />
-        <CheckBoxPreference
-            android:key="checkbox_list_mode"
-            android:title="@string/title_checkbox_list_mode"
-            android:summary="@string/summary_checkbox_list_mode"
-            android:defaultValue="false" />
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/category_advanced_settings"
         android:key="category_advanced_settings">
+        <CheckBoxPreference
+            android:key="checkbox_unlock_fps"
+            android:title="@string/title_unlock_fps"
+            android:summary="@string/summary_unlock_fps"
+            android:defaultValue="false" />
         <CheckBoxPreference
             android:key="checkbox_disable_warnings"
             android:title="@string/title_checkbox_disable_warnings"
@@ -175,6 +195,11 @@
             android:key="checkbox_enable_perf_overlay"
             android:title="@string/title_enable_perf_overlay"
             android:summary="@string/summary_enable_perf_overlay"
+            android:defaultValue="false"/>
+        <CheckBoxPreference
+            android:key="checkbox_enable_post_stream_toast"
+            android:title="@string/title_enable_post_stream_toast"
+            android:summary="@string/summary_enable_post_stream_toast"
             android:defaultValue="false"/>
     </PreferenceCategory>
 </PreferenceScreen>

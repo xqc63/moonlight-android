@@ -8,6 +8,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.view.MotionEvent;
 
@@ -60,6 +61,7 @@ public class DigitalButton extends VirtualControllerElement {
     private TimerLongClickTimerTask longClickTimerTask = null;
 
     private final Paint paint = new Paint();
+    private final RectF rect = new RectF();
 
     private int layer;
     private DigitalButton movingButton = null;
@@ -144,14 +146,18 @@ public class DigitalButton extends VirtualControllerElement {
         // set transparent background
         canvas.drawColor(Color.TRANSPARENT);
 
-        paint.setTextSize(getPercent(getWidth(), 30));
+        paint.setTextSize(getPercent(getWidth(), 25));
         paint.setTextAlign(Paint.Align.CENTER);
         paint.setStrokeWidth(getDefaultStrokeWidth());
 
         paint.setColor(isPressed() ? pressedColor : getDefaultColor());
         paint.setStyle(Paint.Style.STROKE);
-        canvas.drawRect(paint.getStrokeWidth(), paint.getStrokeWidth(),
-                getWidth() - paint.getStrokeWidth(), getHeight() - paint.getStrokeWidth(), paint);
+
+        rect.left = rect.top = paint.getStrokeWidth();
+        rect.right = getWidth() - rect.left;
+        rect.bottom = getHeight() - rect.top;
+
+        canvas.drawOval(rect, paint);
 
         if (icon != -1) {
             Drawable d = getResources().getDrawable(icon);

@@ -14,10 +14,10 @@ public class AndroidAudioRenderer implements AudioRenderer {
 
     private AudioTrack track;
 
-    private AudioTrack createAudioTrack(int channelConfig, int bufferSize, boolean lowLatency) {
+    private AudioTrack createAudioTrack(int channelConfig, int sampleRate, int bufferSize, boolean lowLatency) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
             return new AudioTrack(AudioManager.STREAM_MUSIC,
-                    48000,
+                    sampleRate,
                     channelConfig,
                     AudioFormat.ENCODING_PCM_16BIT,
                     bufferSize,
@@ -28,7 +28,7 @@ public class AndroidAudioRenderer implements AudioRenderer {
                     .setUsage(AudioAttributes.USAGE_GAME);
             AudioFormat format = new AudioFormat.Builder()
                     .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(48000)
+                    .setSampleRate(sampleRate)
                     .setChannelMask(channelConfig)
                     .build();
 
@@ -64,24 +64,45 @@ public class AndroidAudioRenderer implements AudioRenderer {
     }
 
     @Override
-    public int setup(int audioConfiguration) {
+    public int setup(MoonBridge.AudioConfiguration audioConfiguration, int sampleRate, int samplesPerFrame) {
         int channelConfig;
         int bytesPerFrame;
 
-        switch (audioConfiguration)
+        switch (audioConfiguration.channelCount)
         {
-            case MoonBridge.AUDIO_CONFIGURATION_STEREO:
+            case 2:
                 channelConfig = AudioFormat.CHANNEL_OUT_STEREO;
-                bytesPerFrame = 2 * 240 * 2;
                 break;
-            case MoonBridge.AUDIO_CONFIGURATION_51_SURROUND:
+            case 4:
+                channelConfig = AudioFormat.CHANNEL_OUT_QUAD;
+                break;
+            case 6:
                 channelConfig = AudioFormat.CHANNEL_OUT_5POINT1;
-                bytesPerFrame = 6 * 240 * 2;
+                break;
+            case 8:
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    // AudioFormat.CHANNEL_OUT_7POINT1_SURROUND isn't available until Android 6.0,
+                    // yet the CHANNEL_OUT_SIDE_LEFT and CHANNEL_OUT_SIDE_RIGHT constants were added
+                    // in 5.0, so just hardcode the constant so we can work on Lollipop.
+                    channelConfig = 0x000018fc; // AudioFormat.CHANNEL_OUT_7POINT1_SURROUND
+                }
+                else {
+                    // On KitKat and lower, creation of the AudioTrack will fail if we specify
+                    // CHANNEL_OUT_SIDE_LEFT or CHANNEL_OUT_SIDE_RIGHT. That leaves us with
+                    // the old CHANNEL_OUT_7POINT1 which uses left-of-center and right-of-center
+                    // speakers instead of side-left and side-right. This non-standard layout
+                    // is probably not what the user wants, but we don't really have a choice.
+                    channelConfig = AudioFormat.CHANNEL_OUT_7POINT1;
+                }
                 break;
             default:
                 LimeLog.severe("Decoder returned unhandled channel count");
                 return -1;
         }
+
+        LimeLog.info("Audio channel config: "+String.format("0x%X", channelConfig));
+
+        bytesPerFrame = audioConfiguration.channelCount * samplesPerFrame * 2;
 
         // We're not supposed to request less than the minimum
         // buffer size for our buffer, but it appears that we can
@@ -122,7 +143,7 @@ public class AndroidAudioRenderer implements AudioRenderer {
                 case 1:
                 case 3:
                     // Try the larger buffer size
-                    bufferSize = Math.max(AudioTrack.getMinBufferSize(48000,
+                    bufferSize = Math.max(AudioTrack.getMinBufferSize(sampleRate,
                             channelConfig,
                             AudioFormat.ENCODING_PCM_16BIT),
                             bytesPerFrame * 2);
@@ -135,13 +156,13 @@ public class AndroidAudioRenderer implements AudioRenderer {
                     throw new IllegalStateException();
             }
 
-            // Skip low latency options if hardware sample rate isn't 48000Hz
-            if (AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC) != 48000 && lowLatency) {
+            // Skip low latency options if hardware sample rate doesn't match the content
+            if (AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC) != sampleRate && lowLatency) {
                 continue;
             }
 
             try {
-                track = createAudioTrack(channelConfig, bufferSize, lowLatency);
+                track = createAudioTrack(channelConfig, sampleRate, bufferSize, lowLatency);
                 track.play();
 
                 // Successfully created working AudioTrack. We're done here.
@@ -170,14 +191,14 @@ public class AndroidAudioRenderer implements AudioRenderer {
     @Override
     public void playDecodedAudio(short[] audioData) {
         // Only queue up to 40 ms of pending audio data in addition to what AudioTrack is buffering for us.
-        if (MoonBridge.getPendingAudioFrames() < 8) {
+        if (MoonBridge.getPendingAudioDuration() < 40) {
             // This will block until the write is completed. That can cause a backlog
             // of pending audio data, so we do the above check to be able to bound
             // latency at 40 ms in that situation.
             track.write(audioData, 0, audioData.length);
         }
         else {
-            LimeLog.info("Too many pending audio frames: " + MoonBridge.getPendingAudioFrames());
+            LimeLog.info("Too much pending audio data: " + MoonBridge.getPendingAudioDuration() +" ms");
         }
     }
 
