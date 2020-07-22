@@ -203,6 +203,15 @@ public class NvConnection {
 
         return launchNotRunningApp(h, context);
     }
+
+    public NvHTTP genNvHttp() {
+        try {
+            return new NvHTTP(context.serverAddress, uniqueId, context.serverCert, cryptoProvider);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
     
     private boolean launchNotRunningApp(NvHTTP h, ConnectionContext context)
             throws IOException, XmlPullParserException {

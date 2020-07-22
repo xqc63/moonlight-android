@@ -15,6 +15,7 @@ import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.ui.AdapterFragment;
 import com.limelight.ui.AdapterFragmentCallbacks;
 import com.limelight.utils.CacheHelper;
+import com.limelight.utils.Constance;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
@@ -32,6 +33,7 @@ import android.graphics.drawable.BitmapDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
+import android.text.TextUtils;
 import android.view.ContextMenu;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -70,6 +72,11 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
     public final static String NAME_EXTRA = "Name";
     public final static String UUID_EXTRA = "UUID";
     public final static String NEW_PAIR_EXTRA = "NewPair";
+
+    // TODO: 2019/9/22 退到桌面停止推流
+    public final static int TARGET_QUICK_DESKTOP = 1;
+    public final static int TARGET_QUICK_CLOSE = 2;
+    public static int TargetOperating;
 
     private ComputerManagerService.ComputerManagerBinder managerBinder;
     private final ServiceConnection serviceConnection = new ServiceConnection() {
@@ -557,6 +564,14 @@ public class AppView extends Activity implements AdapterFragmentCallbacks {
 
                 if (updated) {
                     appGridAdapter.notifyDataSetChanged();
+                    if (TargetOperating == TARGET_QUICK_DESKTOP) {
+                        TargetOperating = 0;
+                        for (AppObject app : appGridAdapter.getData()) {
+                            if (TextUtils.equals(Constance.DEFAULT_DESKTOP_NAME, app.app.getAppName())) {
+                                ServerHelper.doStart(AppView.this, app.app, computer, managerBinder);
+                            }
+                        }
+                    }
                 }
             }
         });

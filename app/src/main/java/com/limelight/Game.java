@@ -28,8 +28,10 @@ import com.limelight.preferences.GlPreferences;
 import com.limelight.preferences.PreferenceConfiguration;
 import com.limelight.ui.GameGestures;
 import com.limelight.ui.StreamView;
+import com.limelight.utils.Constance;
 import com.limelight.utils.Dialog;
 import com.limelight.utils.NetHelper;
+import com.limelight.utils.ServerHelper;
 import com.limelight.utils.ShortcutHelper;
 import com.limelight.utils.SpinnerDialog;
 import com.limelight.utils.UiHelper;
@@ -58,6 +60,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.SystemClock;
+import android.text.TextUtils;
 import android.util.Rational;
 import android.view.Display;
 import android.view.InputDevice;
@@ -167,6 +170,8 @@ public class Game extends Activity implements SurfaceHolder.Callback,
     public static final String EXTRA_APP_HDR = "HDR";
     public static final String EXTRA_SERVER_CERT = "ServerCert";
 
+    private boolean isCastingDesktop;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -270,6 +275,7 @@ public class Game extends Activity implements SurfaceHolder.Callback,
 
         String host = Game.this.getIntent().getStringExtra(EXTRA_HOST);
         String appName = Game.this.getIntent().getStringExtra(EXTRA_APP_NAME);
+        isCastingDesktop = TextUtils.equals(appName, Constance.DEFAULT_DESKTOP_NAME);
         int appId = Game.this.getIntent().getIntExtra(EXTRA_APP_ID, StreamConfiguration.INVALID_APP_ID);
         String uniqueId = Game.this.getIntent().getStringExtra(EXTRA_UNIQUEID);
         String uuid = Game.this.getIntent().getStringExtra(EXTRA_PC_UUID);
@@ -889,6 +895,15 @@ public class Game extends Activity implements SurfaceHolder.Callback,
                         .putInt("CrashCount", 0)
                         .putInt("LastNotifiedCrashCount", 0)
                         .apply();
+            }
+
+            if (isCastingDesktop && conn != null) {
+                ServerHelper.doQuit(this, Constance.DEFAULT_DESKTOP_NAME, conn, null);
+//                ComputerDetails computer = new ComputerDetails();
+//                computer.name = pcName;
+//                computer.uuid = uuid;
+//                ServerHelper.doQuit(this, computer.details,
+//                        new NvApp("app", 0, false), null, null);
             }
         }
 

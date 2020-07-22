@@ -189,7 +189,10 @@ public class ControllerHandler implements InputManager.InputDeviceListener, UsbD
         }
 
         // Otherwise, we'll try anything that claims to be a non-alphabetic keyboard
-        return device.getKeyboardType() != InputDevice.KEYBOARD_TYPE_ALPHABETIC;
+//        return device.getKeyboardType() != InputDevice.KEYBOARD_TYPE_ALPHABETIC;
+        //目前用的这个遥控器,正面非字母遥控,背面字母遥控,所以这边强行改下
+        return (device.getKeyboardType() != InputDevice.KEYBOARD_TYPE_ALPHABETIC) &&
+                (device.getKeyboardType() != InputDevice.KEYBOARD_TYPE_NON_ALPHABETIC);
     }
 
     public static short getAttachedControllerMask(Context context) {

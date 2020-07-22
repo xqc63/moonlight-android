@@ -130,9 +130,22 @@ public class PcView extends Activity implements AdapterFragmentCallbacks {
         pcGridAdapter.updateLayoutWithPreferences(this, PreferenceConfiguration.readPreferences(this));
 
         // Setup the list view
+        ImageButton quickDesktop = findViewById(R.id.quickDesktop);
         ImageButton settingsButton = findViewById(R.id.settingsButton);
         ImageButton addComputerButton = findViewById(R.id.manuallyAddPc);
         ImageButton helpButton = findViewById(R.id.helpButton);
+        quickDesktop.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                if (pcGridAdapter.getCount() > 0) {
+                    AppView.TargetOperating = AppView.TARGET_QUICK_DESKTOP;
+                    ComputerObject computer = (ComputerObject) pcGridAdapter.getItem(0);
+                    doAppList(computer.details, false);
+                } else {
+                    Toast.makeText(PcView.this, "请先添加电脑", Toast.LENGTH_LONG).show();
+                }
+            }
+        });
 
         settingsButton.setOnClickListener(new OnClickListener() {
             @Override

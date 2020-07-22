@@ -71,4 +71,8 @@ public abstract class GenericGridAdapter<T> extends BaseAdapter {
 
         return convertView;
     }
+
+    public ArrayList<T> getData(){
+        return itemList;
+    }
 }
